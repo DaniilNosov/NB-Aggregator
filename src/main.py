@@ -5,6 +5,9 @@ from sqlalchemy import or_, select, func, desc
 from sqlalchemy.orm import joinedload, aliased
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from contextlib import asynccontextmanager
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from uvicorn import lifespan
 
 from src.core.config import settings
 from src.db.database import get_db
@@ -15,10 +18,31 @@ from src.schemas.match import MatchSchema
 from src.models.statistic import PlayerMatchStat
 from src.services.nba_client import NBADataClient
 
+scheduler = AsyncIOScheduler()
+
+
+async def scheduled_nba_sync():
+    """This function schedules the nba sync"""
+    print("🤖")
+    print("✅")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    scheduler.add_job(scheduled_nba_sync, "cron", hour=9, minute=0)
+
+    scheduler.start()
+    print("🕒Started")
+
+    yield
+
+    scheduler.shutdown()
+    print("🛑 Stopped")
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    description="Агрегатор баскетбольной статистики для портфолио",
-    version="1.0.0"
+    description="Aggregator for NBA data",
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 @app.get("/health")
