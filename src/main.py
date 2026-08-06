@@ -1,7 +1,7 @@
 from datetime import datetime
 
-from fastapi import FastAPI, Depends
-from sqlalchemy import or_
+from fastapi import FastAPI, Depends, HTTPException
+from sqlalchemy import or_, select, func, desc
 from sqlalchemy.orm import joinedload, aliased
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -76,53 +76,6 @@ async def sync_teams(db: AsyncSession = Depends(get_db)):
 
     finally:
         await client.close()
-
-
-@app.post("/sync-players")
-async def sync_players(season: str = "2025-26", db: AsyncSession = Depends(get_db)):
-    """Parsing players and saving them to database"""
-    client = NBADataClient()
-    try:
-        data = await client.get_players(season)
-        if not data:
-            return {"error": "No players found"}
-
-        headers = data["resultSets"][0]["headers"]
-        person_id_idx = headers.index("PERSON_ID")
-        name_idx = headers.index("DISPLAY_FIRST_LAST")
-
-        rows = data["resultSets"][0]["rowSet"]
-        added_count = 0
-
-        for row in rows:
-            player_id = row[person_id_idx]
-            full_name = row[name_idx]
-
-            name_parts = full_name.split(" ", 1)
-            first_name = name_parts[0]
-            last_name = name_parts[1] if len(name_parts) > 1 else ""
-
-            # Проверяем, есть ли игрок в базе
-            result = await db.execute(select(Player).where(Player.id == player_id))
-            existing_player = result.scalar_one_or_none()
-
-            if not existing_player:
-                new_player = Player(
-                    id=player_id,
-                    first_name=first_name,
-                    last_name=last_name,
-                    position=None
-                )
-                db.add(new_player)
-                added_count += 1
-
-        await db.commit()
-
-        return {"status": "success", "added_players": added_count, "season": season}
-
-    finally:
-        await client.close()
-
 
 @app.post("/sync-matches")
 async def sync_matches(season: str = "2025-26", db: AsyncSession = Depends(get_db)):
@@ -283,3 +236,127 @@ async def sync_match_stats(
 
     finally:
         await client.close()
+
+
+@app.post("/sync-players")
+async def sync_players(db: AsyncSession = Depends(get_db)):
+    """Parsing and saving all players to database"""
+    client = NBADataClient()
+    try:
+        data = await client.get_players(season="2022-23")
+        if not data:
+            return {"error": "Could not get players"}
+
+        result_sets = data.get("resultSets", [])
+        players_set = next((rs for rs in result_sets if rs["name"] == "CommonAllPlayers"), None)
+
+        if not players_set:
+            return {"error": "No players found"}
+
+        headers = players_set["headers"]
+        person_id_idx = headers.index("PERSON_ID")
+        name_idx = headers.index("DISPLAY_FIRST_LAST")
+        team_id_idx = headers.index("TEAM_ID")
+
+        rows = players_set["rowSet"]
+        added_count = 0
+
+        for row in rows:
+            player_id = row[person_id_idx]
+            full_name = row[name_idx]
+            team_id = row[team_id_idx]
+
+            valid_team_id = team_id if team_id != 0 else None
+
+            result = await db.execute(select(Player).where(Player.id == player_id))
+            existing_player = result.scalar_one_or_none()
+
+            if not existing_player:
+                name_parts = full_name.split(" ", 1)
+                first_name = name_parts[0]
+                last_name = name_parts[1] if len(name_parts) > 1 else ""
+
+                new_player = Player(
+                    id=player_id,
+                    first_name=first_name,
+                    last_name=last_name,
+                )
+                db.add(new_player)
+                added_count += 1
+
+        await db.commit()
+        return {"status": "success", "added_players": added_count}
+
+    finally:
+        await client.close()
+
+
+@app.get("/leaders/points")
+async def get_top_scorers(limit: int = 10, db: AsyncSession = Depends(get_db)):
+    """Returning top scoring players"""
+
+    # Строим SQL-запрос с JOIN и агрегацией
+    query = (
+        select(
+            Player.first_name,
+            Player.last_name,
+            func.round(func.avg(PlayerMatchStat.points), 1).label("avg_pts")
+        )
+        .join(PlayerMatchStat, Player.id == PlayerMatchStat.player_id)
+        .group_by(Player.id)
+        .order_by(desc("avg_pts"))
+        .limit(limit)
+    )
+
+    result = await db.execute(query)
+    leaders = result.all()
+
+    response_data = []
+    for rank, row in enumerate(leaders, start=1):
+        response_data.append({
+            "rank": rank,
+            "name": f"{row.first_name} {row.last_name}".strip(),
+            "avg_points": float(row.avg_pts)
+        })
+
+    return {"status": "success", "limit": limit, "leaders": response_data}
+
+
+from fastapi import HTTPException
+
+
+@app.get("/players/{player_id}/stats")
+async def get_player_stats(player_id: int, db: AsyncSession = Depends(get_db)):
+    """Returning stats for a player"""
+
+    query = (
+        select(
+            Player.first_name,
+            Player.last_name,
+            func.round(func.avg(PlayerMatchStat.points), 1).label("avg_pts"),
+            func.round(func.avg(PlayerMatchStat.rebounds), 1).label("avg_reb"),
+            func.round(func.avg(PlayerMatchStat.assists), 1).label("avg_ast"),
+            func.count(PlayerMatchStat.match_id).label("games_played")
+        )
+        .join(PlayerMatchStat, Player.id == PlayerMatchStat.player_id, isouter=True)  # isouter=True это LEFT JOIN
+        .where(Player.id == player_id)
+        .group_by(Player.id)
+    )
+
+    result = await db.execute(query)
+    player_data = result.first()
+
+    if not player_data:
+        raise HTTPException(status_code=404, detail="Игрок не найден")
+
+    return {
+        "status": "success",
+        "player_id": player_id,
+        "name": f"{player_data.first_name} {player_data.last_name}".strip(),
+        "stats": {
+            "games_played": player_data.games_played,
+            "avg_points": float(player_data.avg_pts) if player_data.avg_pts else 0.0,
+            "avg_rebounds": float(player_data.avg_reb) if player_data.avg_reb else 0.0,
+            "avg_assists": float(player_data.avg_ast) if player_data.avg_ast else 0.0,
+        }
+    }

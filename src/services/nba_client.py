@@ -56,7 +56,7 @@ class NBADataClient:
             logger.error(f"Error by getting players: {e}")
             return None
 
-    async def get_games(self, season: str = "2025-26"):
+    async def get_games(self, season: str = "2022-23"):
         """Get all nba games by season by async"""
         params = {
             "LeagueID": "00",
@@ -106,4 +106,37 @@ class NBADataClient:
             return response.json()
         except httpx.HTTPError as e:
             logger.error(f"Error by trying to get game: {game_id}: {e}")
+            return None
+
+    async def get_players(self, season: str = "2025-26"):
+        """Getting all active nba players"""
+        params = {
+            "LeagueID": "00",
+            "Season": season,
+            "IsOnlyCurrentSeason": "0"
+        }
+
+        headers = {
+            "Host": "stats.nba.com",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Referer": "https://stats.nba.com/",
+            "x-nba-stats-origin": "stats",
+            "x-nba-stats-token": "true",
+            "Connection": "keep-alive",
+            "Pragma": "no-cache",
+            "Cache-Control": "no-cache"
+        }
+
+        try:
+            response = await self.client.get(
+                "/commonallplayers",
+                params=params,
+                headers=headers
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error by getting players: {e}")
             return None
