@@ -28,4 +28,9 @@ jobs:
     - name: Run tests with pytest
       run: |
         pytest -v
-  
+
+    - name: Run tests with pytest
+      env:
+        DATABASE_URL: "postgresql+asyncpg://postgres:password@localhost:5432/test_db"
+      run: |
+        pytest -v
