@@ -1,4 +1,5 @@
 from datetime import datetime
+import asyncio
 
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
 from fastapi_cache import FastAPICache
@@ -28,16 +29,29 @@ async def scheduled_nba_sync():
     print("🤖 Sync NBA data")
     async with AsyncSessionLocal() as db:
         try:
-            print("⏳")
+            print("⏳ Sync teams...")
             await sync_teams(db=db)
 
-            print("⏳ ")
+            print("⏳ Sync players...")
             await sync_players(db=db)
 
-            print("⏳")
+            print("⏳ Sync matches (schedule)...")
             await sync_matches(db=db)
 
+            # --- ВОТ ЭТОГО КУСКА НЕ ХВАТАЛО ---
+            print("⏳ Syncing boxscores (stats) for all matches...")
+            # Достаем все ID матчей из базы
+            result = await db.execute(select(Match.id))
+            match_ids = result.scalars().all()
+
+            for match_id in match_ids:
+                await asyncio.sleep(1.5)  # Обязательная пауза, чтобы НБА не забанила!
+
+                # Замени `sync_match_stats_logic` на то название, которое у тебя используется
+                await sync_match_stats(match_id, db=db)
+
             print("✅")
+            await db.commit()
 
         except Exception as e:
             await db.rollback()
@@ -51,7 +65,7 @@ async def lifespan(app: FastAPI):
     FastAPICache.init(RedisBackend(redis), prefix="nba-cache")
     print("🚀 Redis cache initialized")
 
-    scheduler.add_job(scheduled_nba_sync, trigger='cron', hour=9, minute=0)
+    scheduler.add_job(scheduled_nba_sync, trigger="cron", hour=9, minute=0)
     scheduler.start()
     print("🕒 Scheduler started in production mode (waiting for 09:00)")
 
@@ -125,7 +139,7 @@ async def sync_teams(db: AsyncSession = Depends(get_db)):
         await client.close()
 
 @app.post("/sync-matches")
-async def sync_matches(season: str = "2025-26", db: AsyncSession = Depends(get_db)):
+async def sync_matches(season: str = "2023-24", db: AsyncSession = Depends(get_db)):
     """Parsing matches and saving them to database"""
     client = NBADataClient()
     try:
@@ -290,7 +304,7 @@ async def sync_players(db: AsyncSession = Depends(get_db)):
     """Parsing and saving all players to database"""
     client = NBADataClient()
     try:
-        data = await client.get_players(season="2022-23")
+        data = await client.get_players(season="2023-24")
         if not data:
             return {"error": "Could not get players"}
 

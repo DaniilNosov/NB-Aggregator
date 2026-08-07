@@ -40,7 +40,7 @@ class NBADataClient:
         """Close the client connection"""
         await self.client.aclose()
 
-    async def get_players(self, season: str = "2025-26"):
+    async def get_players(self, season: str = "2023-24"):
         """Get all nba players by season by async"""
         params = {
             "LeagueID": "00",
@@ -56,7 +56,7 @@ class NBADataClient:
             logger.error(f"Error by getting players: {e}")
             return None
 
-    async def get_games(self, season: str = "2022-23"):
+    async def get_games(self, season: str = "2023-24"):
         """Get all nba games by season by async"""
         params = {
             "LeagueID": "00",
@@ -108,7 +108,7 @@ class NBADataClient:
             logger.error(f"Error by trying to get game: {game_id}: {e}")
             return None
 
-    async def get_players(self, season: str = "2025-26"):
+    async def get_players(self, season: str = "2023-24"):
         """Getting all active nba players"""
         params = {
             "LeagueID": "00",
