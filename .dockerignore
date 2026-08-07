@@ -1,0 +1,47 @@
+# ===========================================
+# Git
+# ===========================================
+.git
+.gitignore
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+
+# Tests
+tests/
+
+# Documentation
+README.md
+
+# Environment
+.env
+.env.*
+
+# Logs
+*.log
+
+# Cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+
+# Docker
+docker-compose.yml
+docker-compose.override.yml
+
+# OS
+.DS_Store
+Thumbs.db

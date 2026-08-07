@@ -6,9 +6,10 @@ services:
     container_name: nba_postgres
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: nba_stats
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Убрали дублирование названия базы
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5433:5432"
     volumes:
@@ -22,8 +23,11 @@ services:
       - "8000:8000"
     depends_on:
       - db
+      - redis
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:password@db:5432/nba_stats
+      # Переопределяем URL специально для среды Docker
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379
 
   redis:
     image: redis:alpine

@@ -1,5 +1,6 @@
 from datetime import datetime
 import asyncio
+import os 
 
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
 from fastapi_cache import FastAPICache
@@ -38,16 +39,13 @@ async def scheduled_nba_sync():
             print("⏳ Sync matches (schedule)...")
             await sync_matches(db=db)
 
-            # --- ВОТ ЭТОГО КУСКА НЕ ХВАТАЛО ---
             print("⏳ Syncing boxscores (stats) for all matches...")
-            # Достаем все ID матчей из базы
             result = await db.execute(select(Match.id))
             match_ids = result.scalars().all()
 
             for match_id in match_ids:
-                await asyncio.sleep(1.5)  # Обязательная пауза, чтобы НБА не забанила!
+                await asyncio.sleep(1.5)
 
-                # Замени `sync_match_stats_logic` на то название, которое у тебя используется
                 await sync_match_stats(match_id, db=db)
 
             print("✅")
@@ -58,10 +56,11 @@ async def scheduled_nba_sync():
             print(f"Error : {e}")
 
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 1. Initialize Redis cache
-    redis = aioredis.from_url("redis://localhost:6379", encoding="utf8", decode_responses=True)
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+    redis = aioredis.from_url(redis_url, encoding="utf8", decode_responses=True)
     FastAPICache.init(RedisBackend(redis), prefix="nba-cache")
     print("🚀 Redis cache initialized")
 
@@ -73,7 +72,6 @@ async def lifespan(app: FastAPI):
 
     scheduler.shutdown()
     print("🛑 Scheduler stopped.")
-
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

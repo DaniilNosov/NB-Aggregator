@@ -10,12 +10,16 @@ class NBADataClient:
 
         self.headers = {
             "Host": "stats.nba.com",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "en-US,en;q=0.5",
-            "Referer": "https://www.nba.com/",
+            "Referer": "https://stats.nba.com/",
             "Origin": "https://www.nba.com",
+            "x-nba-stats-origin": "stats",
+            "x-nba-stats-token": "true",
             "Connection": "keep-alive",
+            "Pragma": "no-cache",
+            "Cache-Control": "no-cache"
         }
 
         self.client = httpx.AsyncClient(
@@ -33,28 +37,8 @@ class NBADataClient:
             response.raise_for_status()
             return response.json()
         except httpx.HTTPError as e:
-            logger.error(f"Error: {e}")
+            logger.error(f"Error by getting teams: {repr(e)}")
             return {"error": str(e)}
-
-    async def close(self):
-        """Close the client connection"""
-        await self.client.aclose()
-
-    async def get_players(self, season: str = "2023-24"):
-        """Get all nba players by season by async"""
-        params = {
-            "LeagueID": "00",
-            "Season": season,
-            "IsOnlyCurrentSeason": "1"
-        }
-
-        try:
-            response = await self.client.get("/commonallplayers", params=params)
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPError as e:
-            logger.error(f"Error by getting players: {e}")
-            return None
 
     async def get_games(self, season: str = "2023-24"):
         """Get all nba games by season by async"""
@@ -69,7 +53,7 @@ class NBADataClient:
             response.raise_for_status()
             return response.json()
         except httpx.HTTPError as e:
-            logger.error(f"Error by getting matches: {e}")
+            logger.error(f"Error by getting matches: {repr(e)}")
             return None
 
     async def get_boxscore(self, game_id: str):
@@ -83,60 +67,30 @@ class NBADataClient:
             "RangeType": "0"
         }
 
-        headers = {
-            "Host": "stats.nba.com",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Referer": "https://stats.nba.com/",
-            "x-nba-stats-origin": "stats",
-            "x-nba-stats-token": "true",
-            "Connection": "keep-alive",
-            "Pragma": "no-cache",
-            "Cache-Control": "no-cache"
-        }
-
         try:
-            response = await self.client.get(
-                "/boxscoretraditionalv2",
-                params=params,
-                headers=headers
-            )
+            response = await self.client.get("/boxscoretraditionalv2", params=params)
             response.raise_for_status()
             return response.json()
         except httpx.HTTPError as e:
-            logger.error(f"Error by trying to get game: {game_id}: {e}")
+            logger.error(f"Error by trying to get game {game_id}: {repr(e)}")
             return None
 
-    async def get_players(self, season: str = "2023-24"):
-        """Getting all active nba players"""
+    async def get_players(self, season: str = "2023-24", only_current: str = "0"):
+        """Getting all nba players (merged logic)"""
         params = {
             "LeagueID": "00",
             "Season": season,
-            "IsOnlyCurrentSeason": "0"
-        }
-
-        headers = {
-            "Host": "stats.nba.com",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Referer": "https://stats.nba.com/",
-            "x-nba-stats-origin": "stats",
-            "x-nba-stats-token": "true",
-            "Connection": "keep-alive",
-            "Pragma": "no-cache",
-            "Cache-Control": "no-cache"
+            "IsOnlyCurrentSeason": only_current
         }
 
         try:
-            response = await self.client.get(
-                "/commonallplayers",
-                params=params,
-                headers=headers
-            )
+            response = await self.client.get("/commonallplayers", params=params)
             response.raise_for_status()
             return response.json()
         except httpx.HTTPError as e:
-            logger.error(f"Error by getting players: {e}")
+            logger.error(f"Error by getting players: {repr(e)}")
             return None
+
+    async def close(self):
+        """Close the client connection"""
+        await self.client.aclose()
