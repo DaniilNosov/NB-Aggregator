@@ -13,6 +13,10 @@ AsyncSessionLocal = async_sessionmaker(
 Base = declarative_base()
 
 async def get_db():
-    """DB session generator"""
+    """
+        Database session generator.
+        Yields an active asynchronous database session and ensures it is properly
+        closed after the request is completed.
+        """
     async with AsyncSessionLocal() as session:
         yield session

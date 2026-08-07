@@ -7,10 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from uvicorn import lifespan
 
 from src.core.config import settings
-from src.db.database import get_db
+from src.db.database import get_db, AsyncSessionLocal
 from src.models.team import Team
 from src.models.player import Player
 from src.models.match import Match
@@ -22,21 +21,41 @@ scheduler = AsyncIOScheduler()
 
 
 async def scheduled_nba_sync():
-    """This function schedules the nba sync"""
-    print("🤖")
-    print("✅")
+    print("🤖 Sync NBA data")
+    async with AsyncSessionLocal() as db:
+        try:
+            print("⏳")
+            await sync_teams(db=db)
+
+            print("⏳ ")
+            await sync_players(db=db)
+
+            print("⏳")
+            await sync_matches(db=db)
+
+            print("✅")
+
+        except Exception as e:
+            await db.rollback()
+            print(f"Error : {e}")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    scheduler.add_job(scheduled_nba_sync, "cron", hour=9, minute=0)
+    """
+        Manages the application lifecycle.
+        Initializes and starts the APScheduler for background tasks on startup,
+        and gracefully shuts it down when the application stops.
+        """
+    scheduler.add_job(scheduled_nba_sync, trigger="cron", hour=9, minute=0)
 
     scheduler.start()
-    print("🕒Started")
+    print("🕒")
 
-    yield
+    yield  # Сервер работает...
 
     scheduler.shutdown()
-    print("🛑 Stopped")
+    print("🛑")
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
