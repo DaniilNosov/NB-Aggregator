@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import AsyncMock, patch
 from httpx import AsyncClient, ASGITransport
 
 from src.main import app
@@ -20,11 +21,13 @@ async def test_health_check():
     assert response.json()["status"] == "ok"
 
 
-async def test_get_teams_endpoint():
+@patch("src.services.nba_client.NBADataClient.get_teams", new_callable=AsyncMock)
+async def test_get_teams_endpoint(mock_nba_api_call):
     """
     Test for checking the teams endpoint.
     Verifies that the API returns a successful status and the correct NBA API JSON structure.
     """
+    mock_nba_api_call.return_value = {"resultSets": [{"name": "dummy_data"}]}
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
