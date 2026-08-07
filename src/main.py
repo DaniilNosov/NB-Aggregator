@@ -1,10 +1,14 @@
 from datetime import datetime
 
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.redis import RedisBackend
+from fastapi_cache.decorator import cache
 from sqlalchemy import or_, select, func, desc
 from sqlalchemy.orm import joinedload, aliased
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from redis import asyncio as aioredis
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -42,20 +46,20 @@ async def scheduled_nba_sync():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-        Manages the application lifecycle.
-        Initializes and starts the APScheduler for background tasks on startup,
-        and gracefully shuts it down when the application stops.
-        """
-    scheduler.add_job(scheduled_nba_sync, trigger="cron", hour=9, minute=0)
+    # 1. Initialize Redis cache
+    redis = aioredis.from_url("redis://localhost:6379", encoding="utf8", decode_responses=True)
+    FastAPICache.init(RedisBackend(redis), prefix="nba-cache")
+    print("🚀 Redis cache initialized")
 
+    scheduler.add_job(scheduled_nba_sync, trigger='cron', hour=9, minute=0)
     scheduler.start()
-    print("🕒")
+    print("🕒 Scheduler started in production mode (waiting for 09:00)")
 
-    yield  # Сервер работает...
+    yield
 
     scheduler.shutdown()
-    print("🛑")
+    print("🛑 Scheduler stopped.")
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -369,6 +373,7 @@ from fastapi import HTTPException
 
 
 @app.get("/players/{player_id}/stats")
+@cache(expire=600)
 async def get_player_stats(player_id: int, db: AsyncSession = Depends(get_db)):
     """Returning stats for a player"""
 
@@ -390,7 +395,7 @@ async def get_player_stats(player_id: int, db: AsyncSession = Depends(get_db)):
     player_data = result.first()
 
     if not player_data:
-        raise HTTPException(status_code=404, detail="Игрок не найден")
+        raise HTTPException(status_code=404, detail="Player not found")
 
     return {
         "status": "success",
@@ -402,4 +407,18 @@ async def get_player_stats(player_id: int, db: AsyncSession = Depends(get_db)):
             "avg_rebounds": float(player_data.avg_reb) if player_data.avg_reb else 0.0,
             "avg_assists": float(player_data.avg_ast) if player_data.avg_ast else 0.0,
         }
+    }
+
+
+@app.post("/admin/force-sync", tags=["Admin"])
+async def force_sync(background_tasks: BackgroundTasks):
+    """
+    Triggers the NBA data synchronization process manually.
+    Runs the synchronization in the background to prevent blocking the HTTP response.
+    """
+    background_tasks.add_task(scheduled_nba_sync)
+
+    return {
+        "status": "success",
+        "message": "Synchronization started in the background. Check terminal logs for progress."
     }

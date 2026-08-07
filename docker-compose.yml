@@ -25,5 +25,11 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:password@db:5432/nba_stats
 
+  redis:
+    image: redis:alpine
+    container_name: nba_redis
+    ports:
+      - "6379:6379"
+
 volumes:
   postgres_data:

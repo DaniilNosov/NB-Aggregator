@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import date
 
 class TeamSchema(BaseModel):
@@ -6,8 +6,8 @@ class TeamSchema(BaseModel):
     name: str
     abbreviation: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class MatchSchema(BaseModel):
     id: int
@@ -15,5 +15,4 @@ class MatchSchema(BaseModel):
     home_team: TeamSchema
     away_team: TeamSchema
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
